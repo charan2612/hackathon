@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.settings import settings
 from app.api import problems, submissions, ai, analytics, profile
+from app.api import mistakes
 
 app = FastAPI(title="CodePilotX API", version="1.0.0")
 
@@ -18,6 +19,7 @@ app.include_router(submissions.router, prefix="/api")
 app.include_router(ai.router, prefix="/api")
 app.include_router(analytics.router, prefix="/api")
 app.include_router(profile.router, prefix="/api")
+app.include_router(mistakes.router, prefix="/api")
 
 @app.get("/health")
 def health():

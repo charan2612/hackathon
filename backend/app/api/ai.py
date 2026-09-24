@@ -3,6 +3,7 @@ from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 from uuid import UUID
+import json
 
 from app.db import get_db
 from app.auth import current_user_id
@@ -44,7 +45,7 @@ async def review(
 ):
     p = db.execute(
         text(
-            "SELECT title,description,constraints,examples "
+            "SELECT title, description, constraints, examples "
             "FROM problems WHERE id=:id"
         ),
         {"id": str(req.problem_id)},
@@ -65,6 +66,7 @@ async def review(
         print("AI REVIEW ERROR:", repr(e))
         raise HTTPException(503, f"AI service error: {str(e)}")
 
+    # Save AI interaction
     db.execute(
         text(
             """INSERT INTO ai_interactions(
@@ -85,11 +87,17 @@ async def review(
         {
             "u": str(user_id),
             "p": str(req.problem_id),
-            "req": "{}",
-            "res": result,
+            "req": json.dumps({
+                "language": req.language,
+                "source_code": req.source_code,
+                "test_results": req.test_results,
+                "previous_errors": req.previous_errors,
+            }),
+            "res": json.dumps(result),
         },
     )
 
+    # Save AI review
     db.execute(
         text(
             """INSERT INTO ai_reviews(
@@ -111,7 +119,7 @@ async def review(
             "u": str(user_id),
             "p": str(req.problem_id),
             "c": req.source_code,
-            "r": result,
+            "r": json.dumps(result),
             "conf": result.get("confidence"),
         },
     )
@@ -129,7 +137,7 @@ async def hint(
 ):
     p = db.execute(
         text(
-            "SELECT title,description "
+            "SELECT title, description "
             "FROM problems WHERE id=:id"
         ),
         {"id": str(req.problem_id)},
@@ -166,7 +174,7 @@ async def hint(
         {
             "u": str(user_id),
             "p": str(req.problem_id),
-            "res": result,
+            "res": json.dumps(result),
         },
     )
 
@@ -212,7 +220,7 @@ def decision(
             "u": str(user_id),
             "p": str(req.problem_id),
             "o": req.original_code,
-            "s": req.suggestion,
+            "s": json.dumps(req.suggestion),
             "d": req.decision,
             "m": req.modified_code,
             "c": req.confidence,
@@ -224,4 +232,39 @@ def decision(
     return {
         "saved": True,
         "decision": req.decision,
+    }
+
+
+# AI Independence
+@router.get("/ai/independence")
+def independence(
+    user_id: UUID = Depends(current_user_id),
+    db: Session = Depends(get_db),
+):
+    rows = db.execute(
+        text(
+            """
+            SELECT interaction_type, COUNT(*) AS count
+            FROM ai_interactions
+            WHERE user_id = :u
+            GROUP BY interaction_type
+            """
+        ),
+        {"u": str(user_id)},
+    ).mappings().all()
+
+    counts = {
+        "hint": 0,
+        "review": 0,
+    }
+
+    for row in rows:
+        counts[row["interaction_type"]] = row["count"]
+
+    total_ai = counts["hint"] + counts["review"]
+
+    return {
+        "hint_count": counts["hint"],
+        "review_count": counts["review"],
+        "total_ai_interactions": total_ai,
     }
