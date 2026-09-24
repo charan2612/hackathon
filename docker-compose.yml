@@ -1,0 +1,22 @@
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: codepilotx
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5433:5432"
+    volumes:
+      - codepilotx_pg:/var/lib/postgresql/data
+
+  executor:
+    build: ./execution-service
+    ports:
+      - "9000:9000"
+    privileged: true
+    environment:
+      EXECUTOR_TIMEOUT_SECONDS: 5
+
+volumes:
+  codepilotx_pg:
